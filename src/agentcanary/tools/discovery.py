@@ -93,53 +93,78 @@ async def _scan_processes(target: str) -> str:
 
 
 async def _scan_ports(target: str) -> str:
-    """Find listening ports for target agent."""
+    """Find listening ports — match by process patterns, not exact names."""
     try:
-        # Get PIDs from process scan
         tl = subprocess.run(["tasklist"], capture_output=True, text=True, timeout=5, encoding="gbk", errors="replace")
-        target_pids = set()
-        for line in tl.stdout.split("\n"):
-            if target.lower() in line.lower():
-                parts = line.split()
-                if len(parts) >= 2:
-                    try:
-                        target_pids.add(int(parts[1]))
-                    except ValueError:
-                        pass
-
-        # Scan ports
         ns = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=5, encoding="gbk", errors="replace")
+
+        # Build PID→process_name map
+        pid_to_name = {}
+        for line in tl.stdout.split("\n"):
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    pid = int(parts[1])
+                    pid_to_name[pid] = parts[0]
+                except ValueError:
+                    pass
+
+        # Find target PIDs — match ANY substring of target or known aliases
+        target_lower = target.lower()
+        aliases = {"kro": "krowork", "claw": "openclaw"}  # expand known short names
+        search_terms = {target_lower}
+        for alias, full in aliases.items():
+            if alias in target_lower or target_lower in full:
+                search_terms.add(alias)
+
+        target_pids = set()
+        for pid, name in pid_to_name.items():
+            name_lower = name.lower()
+            if any(term in name_lower for term in search_terms):
+                target_pids.add(pid)
+
+        # Match ports to target PIDs
         found = []
         for line in ns.stdout.split("\n"):
             if "LISTENING" not in line:
                 continue
             parts = line.split()
-            if len(parts) >= 5:
+            if len(parts) < 5:
+                continue
+            try:
+                pid = int(parts[-1])
+            except ValueError:
+                continue
+
+            local = parts[1]
+            if pid in target_pids and "127.0.0.1" in local:
+                port = local.split(":")[-1]
+                name = pid_to_name.get(pid, "?")
+                found.append(f"  {local}:{port} → {name} (PID {pid})")
+
+        if not found:
+            # Fallback: show ALL localhost listening ports with their process names
+            for line in ns.stdout.split("\n"):
+                if "LISTENING" not in line or "127.0.0.1" not in line:
+                    continue
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
                 try:
                     pid = int(parts[-1])
                 except ValueError:
                     continue
-                # Match specific PIDs, or any port on localhost
+                name = pid_to_name.get(pid, "?")
                 local = parts[1]
-                if pid in target_pids and "127.0.0.1" in local:
-                    port = local.split(":")[-1]
-                    found.append(f"  {local} (PID {pid}) → 端口 {port}")
+                port = local.split(":")[-1]
+                # Only show non-system ports (>1024, likely agent services)
+                try:
+                    if int(port) > 1024:
+                        found.append(f"  {local}:{port} → {name} (PID {pid})")
+                except ValueError:
+                    pass
 
-        if not found and target_pids:
-            # Fallback: show all ports for target PIDs
-            for line in ns.stdout.split("\n"):
-                if "LISTENING" not in line:
-                    continue
-                parts = line.split()
-                if len(parts) >= 5:
-                    try:
-                        pid = int(parts[-1])
-                    except ValueError:
-                        continue
-                    if pid in target_pids:
-                        found.append(f"  {parts[1]} (PID {pid})")
-
-        return "\n".join(found) if found else "  未找到监听端口"
+        return "\n".join(found[:15]) if found else "  未找到监听端口"
     except Exception as e:
         return f"  端口扫描失败: {e}"
 
