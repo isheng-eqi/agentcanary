@@ -174,7 +174,7 @@ class ChatLoop:
 
         for i in range(max_steps):
             # ═══ Token 估算 + 自动压缩 ═══
-            total_chars = sum(len(m.get("content", "")) for m in self.messages)
+            total_chars = sum(len(m.get("content") or "") for m in self.messages)
             estimated_tokens = total_chars // 4
 
             if estimated_tokens > 400000:
@@ -300,7 +300,7 @@ class ChatLoop:
         keep = []
         pruned = 0
         for msg in middle:
-            if msg.get("role") == "tool" and len(msg.get("content", "")) > 500:
+            if msg.get("role") == "tool" and len(msg.get("content") or "") > 500:
                 # Replace large tool outputs with placeholder
                 keep.append({"role": "tool", "content": "[Old tool output pruned]", 
                              "tool_call_id": msg.get("tool_call_id", "")})
