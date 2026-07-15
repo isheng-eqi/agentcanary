@@ -279,4 +279,4 @@ async def _probe_endpoints(target: str) -> str:
 
 
 def register_discovery_tools(r: ToolRegistry):
-    r.register(Tool("discover_target", "自动发现目标Agent——扫描进程/端口/日志/配置，提取API地址和认证信息", {"target_name": "目标Agent名称(如krowork/openclaw/cursor)"}, discover_target))
+    r.register(Tool("discover_target", "自动发现目标Agent——扫描进程/端口/日志/配置", {"target_name": "目标Agent名称"}, func=discover_target))

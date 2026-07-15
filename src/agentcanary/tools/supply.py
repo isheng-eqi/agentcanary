@@ -25,4 +25,4 @@ async def audit_skills(target_url: str) -> ToolResult:
 
 
 def register_l4_tools(r: ToolRegistry):
-    r.register(Tool("audit_skills", "供应链审计(ASI04)——检查Agent技能/插件安全性", {"target_url": "目标API"}, audit_skills))
+    r.register(Tool("audit_skills", "供应链审计(ASI04)——检查Agent技能/插件安全性", {"target_url": "目标API"}, func=audit_skills))

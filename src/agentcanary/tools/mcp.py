@@ -35,4 +35,4 @@ async def scan_mcp_tools(mcp_url: str) -> ToolResult:
 
 
 def register_l3_tools(r: ToolRegistry):
-    r.register(Tool("scan_mcp_tools", "扫描MCP server——检测工具描述投毒(MCP Top 10)", {"mcp_url": "MCP服务器URL"}, scan_mcp_tools))
+    r.register(Tool("scan_mcp_tools", "扫描MCP server——检测工具描述投毒(MCP Top 10)", {"mcp_url": "MCP服务器URL"}, func=scan_mcp_tools))

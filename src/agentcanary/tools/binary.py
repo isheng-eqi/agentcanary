@@ -401,4 +401,4 @@ def _extract_electron_hints(data: bytes) -> list[str]:
 
 
 def register_binary_tools(r: ToolRegistry):
-    r.register(Tool("analyze_binary", "专业逆向分析——4阶段：识别→静态分析→深度提取→安全信号汇总", {"path": "二进制文件路径"}, analyze_binary))
+    r.register(Tool("analyze_binary", "分析二进制文件——提取URL/密钥/API路径/PE结构", {"path": "二进制文件路径"}, func=analyze_binary))

@@ -64,6 +64,6 @@ async def tool_web_search(query: str) -> ToolResult:
 
 
 def register_universal(r: ToolRegistry):
-    r.register(Tool("terminal", "执行shell命令——扫描进程/端口/网络", {"cmd": "命令"}, tool_terminal))
-    r.register(Tool("read_file", "读取文件——日志/配置/源码分析", {"path": "文件路径"}, tool_read_file))
-    r.register(Tool("web_search", "搜索网络——CVE/文档/案例", {"query": "搜索关键词"}, tool_web_search))
+    r.register(Tool("terminal", "执行shell命令", {"cmd": "命令"}, func=tool_terminal))
+    r.register(Tool("read_file", "读取文件", {"path": "文件路径"}, func=tool_read_file))
+    r.register(Tool("web_search", "搜索网络", {"query": "搜索关键词"}, func=tool_web_search))

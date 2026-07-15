@@ -67,7 +67,7 @@ canary
 ```
 agentcanary/
 ├── src/agentcanary/
-│   ├── chat.py          # 对话引擎 (Hermes 风格)
+│   ├── chat.py          # 对话引擎 (自主设计)
 │   ├── llm.py           # LLM 客户端 (DeepSeek + function calling)
 │   ├── memory/store.py  # 约束驱动 Memory + Skill 自进化
 │   ├── security.py      # 安全层 (注入扫描 + 执行边界)
@@ -83,7 +83,7 @@ agentcanary/
 │       └── registry.py  # 工具注册表
 ```
 
-## 自进化原理（Hermes 设计照搬）
+## 自进化原理（约束驱动自进化）
 
 **约束驱动**：记忆容量 6000 字不是限制，是触发整理的信号。超限 → 返回当前条目 + 整理建议 → LLM 自己合并删除 → 三次失败自我降级。
 

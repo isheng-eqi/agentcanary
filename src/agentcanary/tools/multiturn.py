@@ -35,4 +35,4 @@ async def multi_turn_attack(target_url: str, turns_json: str) -> ToolResult:
 
 
 def register_l5_tools(r: ToolRegistry):
-    r.register(Tool("multi_turn_attack", "多轮越狱——分布式攻击突破单轮检测(Layer 5)", {"target_url": "目标API", "turns_json": "JSON格式的轮次数组"}, multi_turn_attack))
+    r.register(Tool("multi_turn_attack", "多轮越狱——分布式攻击突破单轮检测(Layer 5)", {"target_url": "目标API", "turns_json": "JSON格式的轮次数组"}, required=["target_url", "turns_json"], func=multi_turn_attack))

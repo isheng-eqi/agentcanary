@@ -63,7 +63,6 @@ class ChatLoop:
         self.running = True
         self.target_url = ""
         self.memory = MemoryStore()
-        self.skills = SkillStore()
         self.boundary = ExecutionBoundary()
 
         self.tools = ToolRegistry()
@@ -160,9 +159,6 @@ class ChatLoop:
                 break
             if user_input in ("/m", "/memory"):
                 self._show_memory()
-                continue
-            if user_input in ("/s", "/skills"):
-                self.console.print(", ".join(self.skills.list_all()) or "暂无")
                 continue
             if user_input in ("/t", "/tools"):
                 self.console.print(self.tools.describe())
@@ -353,7 +349,7 @@ class ChatLoop:
 
         self.messages = self.messages[:protected_head] + keep + self.messages[-protected_tail:]
         if pruned:
-            self.console.print(f"  [dim]  剪枝 {pruned} 个旧工具输出 ({sum(len(m.get('content','')) for m in self.messages)//4:,} tokens)[/]")
+            self.console.print(f"  [dim]  剪枝 {pruned} 个旧工具输出[/]")
 
     def _auto_reflect(self):
         """Post-attack: scan conversation for attack results → auto-save to Memory.
