@@ -172,6 +172,14 @@ class ChatLoop:
         self.messages.append({"role": "user", "content": user_input})
 
         for i in range(25):
+            # ═══ Token 估算 + 自动压缩 ═══
+            total_chars = sum(len(m.get("content", "")) for m in self.messages)
+            estimated_tokens = total_chars // 4  # ~4 chars/token heuristic
+
+            if estimated_tokens > 400000:  # 50% of deepseek-v4 1M context
+                self.console.print("  [dim]🗜️ 压缩上下文...[/]")
+                self._compact_context()
+
             try:
                 reasoning, reply, tool_call = await self.llm.think_with_tools(
                     self.messages, self._tool_schemas
@@ -257,6 +265,32 @@ class ChatLoop:
             return await tool.func(**valid)
         else:
             return await tool.func(str(parsed))
+
+    def _compact_context(self):
+        """Hermes-style sandwich compression: protect head+tail, trim old tool outputs."""
+        # Protect: system prompt (index 0) + last 8 messages
+        protected_head = 1  # system prompt
+        protected_tail = 8  # last 8 messages (recent context)
+
+        if len(self.messages) <= protected_head + protected_tail + 2:
+            return  # too few messages to compress
+
+        # Prune old tool outputs in the middle
+        middle = self.messages[protected_head:-protected_tail]
+        keep = []
+        pruned = 0
+        for msg in middle:
+            if msg.get("role") == "tool" and len(msg.get("content", "")) > 500:
+                # Replace large tool outputs with placeholder
+                keep.append({"role": "tool", "content": "[Old tool output pruned]", 
+                             "tool_call_id": msg.get("tool_call_id", "")})
+                pruned += 1
+            else:
+                keep.append(msg)
+
+        self.messages = self.messages[:protected_head] + keep + self.messages[-protected_tail:]
+        if pruned:
+            self.console.print(f"  [dim]  剪枝 {pruned} 个旧工具输出 ({sum(len(m.get('content','')) for m in self.messages)//4:,} tokens)[/]")
 
     def _auto_reflect(self):
         """Post-turn: extract insights if attack results are present."""
