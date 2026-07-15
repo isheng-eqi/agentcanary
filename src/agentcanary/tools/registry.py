@@ -17,7 +17,8 @@ class Tool:
     name: str
     description: str
     parameters: dict  # {name: description}
-    func: Callable[..., Awaitable[ToolResult]]
+    func: Callable[..., Awaitable[ToolResult]] = None
+    required: list[str] | None = None  # which params required (None = first only)
 
 
 class ToolRegistry:

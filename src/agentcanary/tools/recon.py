@@ -96,8 +96,8 @@ async def verify_memory_poison(target_url: str, trigger: str) -> ToolResult:
 
 
 def register_l1_tools(r: ToolRegistry):
-    r.register(Tool("recon_probe", "侦察——探测目标Agent能力、防御、弱点", {"target_url": "目标API地址"}, recon_probe))
-    r.register(Tool("send_payload", "发送攻击载荷——文本注入(ASI01/LLM01/LLM07)", {"target_url": "目标API地址", "payload": "攻击文本"}, send_payload))
-    r.register(Tool("analyze_result", "分析攻击结果——判断成功/失败/不确定", {"response": "目标回应文本"}, analyze_result))
-    r.register(Tool("test_memory_poison", "记忆投毒测试(ASI06)——注入数据到目标记忆", {"target_url": "目标API", "poison_text": "恶意数据"}, test_memory_poison))
-    r.register(Tool("verify_memory_poison", "验证记忆投毒——检查投毒是否持久化", {"target_url": "目标API", "trigger": "触发词"}, verify_memory_poison))
+    r.register(Tool("recon_probe", "侦察——探测目标Agent能力、防御、弱点", {"target_url": "目标API地址"}, func=recon_probe))
+    r.register(Tool("send_payload", "发送攻击载荷——文本注入(ASI01/LLM01/LLM07)", {"target_url": "目标API地址", "payload": "攻击文本"}, required=["target_url", "payload"], func=send_payload))
+    r.register(Tool("analyze_result", "分析攻击结果——判断成功/失败/不确定", {"response": "目标回应文本"}, func=analyze_result))
+    r.register(Tool("test_memory_poison", "记忆投毒测试(ASI06)——注入数据到目标记忆", {"target_url": "目标API", "poison_text": "恶意数据"}, required=["target_url", "poison_text"], func=test_memory_poison))
+    r.register(Tool("verify_memory_poison", "验证记忆投毒——检查投毒是否持久化", {"target_url": "目标API", "trigger": "触发词"}, required=["target_url", "trigger"], func=verify_memory_poison))

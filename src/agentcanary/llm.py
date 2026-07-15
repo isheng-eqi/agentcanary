@@ -39,15 +39,17 @@ class LLMClient:
 
 
 def tools_to_schema(tools_registry) -> list[dict]:
-    """Convert tools to OpenAI function calling schema. Only first param required."""
+    """Convert tools to OpenAI function calling schema.
+    Uses tool.required if set, otherwise defaults to first param only."""
     schemas = []
     for tool in tools_registry.list_all():
         props = {}
-        required = []
+        if tool.required is None:
+            required = [list(tool.parameters.keys())[0]] if tool.parameters else []
+        else:
+            required = tool.required
         for i, (pname, pdesc) in enumerate(tool.parameters.items()):
             props[pname] = {"type": "string", "description": pdesc}
-            if i == 0:
-                required.append(pname)
         schemas.append({
             "type": "function",
             "function": {

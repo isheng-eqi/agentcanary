@@ -43,6 +43,6 @@ async def abuse_trust(target_url: str, spoofed_source: str) -> ToolResult:
 
 
 def register_l2_tools(r: ToolRegistry):
-    r.register(Tool("inject_params", "参数注入(ASI02/ASI05)——用工具调用格式嵌入恶意参数", {"target_url": "目标API", "payload": "攻击载荷"}, inject_params))
-    r.register(Tool("hijack_goal", "目标劫持(ASI01)——覆盖Agent原始指令", {"target_url": "目标API", "fake_goal": "伪造的目标"}, hijack_goal))
-    r.register(Tool("abuse_trust", "信任滥用(ASI09)——伪装系统/管理员消息", {"target_url": "目标API", "spoofed_source": "伪装来源"}, abuse_trust))
+    r.register(Tool("inject_params", "参数注入(ASI02/ASI05)——用工具调用格式嵌入恶意参数", {"target_url": "目标API", "payload": "攻击载荷"}, required=["target_url", "payload"], func=inject_params))
+    r.register(Tool("hijack_goal", "目标劫持(ASI01)——覆盖Agent原始指令", {"target_url": "目标API", "fake_goal": "伪造的目标"}, required=["target_url", "fake_goal"], func=hijack_goal))
+    r.register(Tool("abuse_trust", "信任滥用(ASI09)——伪装系统/管理员消息", {"target_url": "目标API", "spoofed_source": "伪装来源"}, required=["target_url", "spoofed_source"], func=abuse_trust))
