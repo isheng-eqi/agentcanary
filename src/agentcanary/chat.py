@@ -23,6 +23,7 @@ from agentcanary.tools.supply import register_l4_tools
 from agentcanary.tools.multiturn import register_l5_tools
 from agentcanary.tools.discovery import register_discovery_tools
 from agentcanary.tools.universal import register_universal
+from agentcanary.tools.binary import register_binary_tools
 from agentcanary.memory.store import MemoryStore, SkillStore
 from agentcanary.security import ExecutionBoundary
 
@@ -72,6 +73,7 @@ class ChatLoop:
         register_l5_tools(self.tools)
         register_discovery_tools(self.tools)
         register_universal(self.tools)
+        register_binary_tools(self.tools)
 
     async def run(self):
         from rich.console import Console
