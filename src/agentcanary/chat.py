@@ -24,7 +24,7 @@ from agentcanary.tools.multiturn import register_l5_tools
 from agentcanary.tools.discovery import register_discovery_tools
 from agentcanary.tools.universal import register_universal
 from agentcanary.tools.binary import register_binary_tools
-from agentcanary.memory.store import MemoryStore, SkillStore
+from agentcanary.memory.store import MemoryStore, sanitize_snapshot
 from agentcanary.security import ExecutionBoundary
 
 
@@ -79,18 +79,36 @@ class ChatLoop:
         # Register memory tools (need self reference)
         from agentcanary.tools.registry import Tool as T
         async def mem_add(content: str, category: str = "tactic") -> ToolResult:
-            self.memory.add(content, category, 0.7)
-            return ToolResult("memory_add", True, f"已记录 ({self.memory.stats()['count']}条)")
+            r = self.memory.add(content, category)
+            if r.get("needs_consolidation"):
+                return ToolResult("memory_add", False, "",
+                    f"记忆已满 ({r['char_usage']}/{r['char_limit']})。"
+                    f"请用 memory_batch 整理后重试。当前条目: {r['current_entries'][:5]}")
+            if r.get("skipped"):
+                return ToolResult("memory_add", True, "跳过（内容太短）")
+            return ToolResult("memory_add", True,
+                f"已{'合并' if r.get('merged') else '保存'} ({self.memory.stats()['count']}条)")
+
+        async def mem_batch(operations: str) -> ToolResult:
+            import json as _j
+            try:
+                ops = _j.loads(operations)
+            except Exception:
+                ops = [{"action": "remove", "old_text": operations}]
+            r = self.memory.batch(ops)
+            if r.get("success"):
+                return ToolResult("memory_batch", True, f"整理完成 ({self.memory.stats()['char_usage']}字)")
+            return ToolResult("memory_batch", False, "", r.get("error", "整理失败"))
 
         async def mem_search(query: str) -> ToolResult:
             entries = self.memory.search(query, 5)
             if not entries:
                 return ToolResult("memory_search", True, "无相关记忆")
-            return ToolResult("memory_search", True,
-                "\n".join(f"[{e.get('category','?')}] {e['content'][:120]}" for e in entries))
+            return ToolResult("memory_search", True, "\n".join(entries))
 
-        self.tools.register(T("memory_add", "记录攻击经验——自动保存成功/失败的战术", {"content": "经验内容", "category": "tactic/defense/insight"}, func=mem_add))
-        self.tools.register(T("memory_search", "搜索历史攻击经验——下次攻击前查", {"query": "关键词"}, func=mem_search))
+        self.tools.register(T("memory_add", "记录攻击经验（超限返回整理指令）", {"content": "经验内容", "category": "tactic/defense/insight"}, func=mem_add))
+        self.tools.register(T("memory_batch", "批量整理记忆（删除/合并/新增）", {"operations": "JSON操作数组"}, func=mem_batch))
+        self.tools.register(T("memory_search", "搜索历史攻击经验", {"query": "关键词"}, func=mem_search))
 
     async def run(self):
         from rich.console import Console
@@ -115,8 +133,10 @@ class ChatLoop:
         ms = self.memory.stats()
         self.console.print(f"[dim]记忆: {ms['count']}条/{ms['char_limit']}字 ({ms['char_usage']}已用)[/]\n")
 
+        # Build system prompt with sanitized snapshot (injection protection)
+        snapshot = sanitize_snapshot(self.memory._snapshot)
         system = SYSTEM_PROMPT.format(
-            memories=self.memory.snapshot_text(),
+            memories="\n".join(snapshot[-20:]) if snapshot else "暂无",
             memory_usage=self.memory._usage(),
             memory_limit=self.memory.char_limit,
         )
@@ -162,9 +182,11 @@ class ChatLoop:
     def _show_memory(self):
         ms = self.memory.stats()
         self.console.print(f"\n[bold]Memory[/] {ms['count']}条/{ms['char_limit']}字 ({ms['char_usage']}已用)")
-        for e in self.memory.entries[-10:]:
-            icon = {"tactic": "⚔", "defense": "🛡", "insight": "💡"}.get(e.get("category", ""), "•")
-            self.console.print(f"  {icon} [{e.get('confidence',0):.0%}] {e['content'][:120]}")
+        if ms['failures']:
+            self.console.print(f"[yellow]  整理失败: {ms['failures']}次 (3次将自我降级)[/]")
+        for e in self.memory.all_entries()[-10:]:
+            icon = "⚔" if "[tactic]" in e else "🛡" if "[defense]" in e else "💡" if "[insight]" in e else "•"
+            self.console.print(f"  {icon} {e[:120]}")
 
     def _preprocess(self, text: str) -> str:
         lower = text.strip().lower()
@@ -334,27 +356,36 @@ class ChatLoop:
             self.console.print(f"  [dim]  剪枝 {pruned} 个旧工具输出 ({sum(len(m.get('content','')) for m in self.messages)//4:,} tokens)[/]")
 
     def _auto_reflect(self):
-        """Post-attack: scan conversation for attack results → auto-save to Memory."""
+        """Post-attack: scan conversation for attack results → auto-save to Memory.
+
+        Hermes-style: not complex analysis, just extracting signals from tool output.
+        """
         if not self.llm or len(self.messages) < 10:
             return
 
-        # Extract recent analyze_result outputs from tool messages
         findings = []
         for msg in self.messages[-20:]:
             if msg.get("role") != "tool":
                 continue
             content = msg.get("content") or ""
             if "SUCCESS" in content:
-                # Extract attack context from nearby messages
-                findings.append(f"⚔ 攻击成功: {content[:150]}")
+                findings.append(("tactic", f"⚔ {content[:150]}"))
             elif "FAILED" in content:
-                findings.append(f"🛡 攻击被拦截: {content[:150]}")
+                findings.append(("defense", f"🛡 {content[:150]}"))
 
-        for f in findings[-5:]:
-            self.memory.add(f, "tactic" if "⚔" in f else "defense", 0.7)
+        for category, text in findings[-5:]:
+            r = self.memory.add(text, category)
+            # If consolidation needed, try a quick batch
+            if not r.get("success") and r.get("needs_consolidation"):
+                # Auto-prune: remove lowest-value entries
+                all_e = self.memory.all_entries()
+                if len(all_e) > 10:
+                    ops = [{"action": "remove", "old_text": all_e[0]},  # remove oldest
+                           {"action": "add", "content": text, "category": category}]
+                    self.memory.batch(ops)
 
         if findings:
-            self.console.print(f"  [dim]📝 自动记录 {len(findings[-5:])} 条经验[/]")
+            self.console.print(f"  [dim]📝 自动记录 {min(len(findings), 5)} 条经验[/]")
 
 
 def _sim(a: str, b: str) -> float:
