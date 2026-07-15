@@ -17,7 +17,7 @@ import os, re
 from datetime import datetime, timezone
 from pathlib import Path
 
-ENTRY_DELIMITER = "§"
+ENTRY_DELIMITER = "䷀"
 MAX_CONSOLIDATION_FAILURES_PER_TURN = 3
 
 
