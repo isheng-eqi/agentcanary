@@ -170,26 +170,42 @@ class ChatLoop:
 
     async def _chat_turn(self, user_input: str):
         self.messages.append({"role": "user", "content": user_input})
+        max_steps = 25
 
-        for i in range(25):
+        for i in range(max_steps):
             # ═══ Token 估算 + 自动压缩 ═══
             total_chars = sum(len(m.get("content", "")) for m in self.messages)
-            estimated_tokens = total_chars // 4  # ~4 chars/token heuristic
+            estimated_tokens = total_chars // 4
 
-            if estimated_tokens > 400000:  # 50% of deepseek-v4 1M context
+            if estimated_tokens > 400000:
                 self.console.print("  [dim]🗜️ 压缩上下文...[/]")
                 self._compact_context()
 
-            try:
-                reasoning, reply, tool_call = await self.llm.think_with_tools(
-                    self.messages, self._tool_schemas
-                )
-            except Exception as e:
-                if "401" in str(e) or "auth" in str(e).lower():
-                    self.console.print("[red]✗ API key 无效[/]")
-                else:
-                    self.console.print(f"[red]✗ LLM: {e}[/]")
-                return
+            # LLM 调用 + 重试（处理瞬时网络错误和限流）
+            for attempt in range(3):
+                try:
+                    reasoning, reply, tool_call = await self.llm.think_with_tools(
+                        self.messages, self._tool_schemas
+                    )
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    # 不可恢复错误 → 立即停止
+                    if "401" in err_str or "auth" in err_str.lower():
+                        self.console.print("[red]✗ API key 无效[/]")
+                        return
+                    # 可恢复错误 → 重试
+                    if attempt < 2 and any(k in err_str.lower() for k in
+                        ["429", "rate", "503", "timeout", "connection", "reset", "eof"]):
+                        self.console.print(f"  [dim]重试 ({attempt+2}/3)...[/]")
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    # 未知错误 → 打印后尝试继续
+                    self.console.print(f"  [yellow]⚠ LLM: {err_str[:100]}[/]")
+                    if attempt < 2:
+                        await asyncio.sleep(1)
+                        continue
+                    return  # 3次全失败 → 放弃本回合
 
             if reasoning:
                 self.console.print(f"[dim]💭 {reasoning[:250]}[/]")
@@ -229,7 +245,11 @@ class ChatLoop:
                 "content": result.output[:800] if result else "OK",
             })
 
-        # Auto-reflect: extract insights from this session
+        else:
+            # for loop completed without break → max_steps reached
+            self.console.print(f"  [yellow]⚠ 达到最大步骤 ({max_steps})，等待下一条指令[/]")
+
+        # Auto-reflect
         if len(self.messages) > 10:
             self._auto_reflect()
 
